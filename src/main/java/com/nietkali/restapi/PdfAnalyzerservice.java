@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -113,6 +114,17 @@ public class PdfAnalyzerservice {
         } catch (IOException e) {
             detected.add("File_Read_Error");
             return new PdfCheckResponce(fileName, false, "Error in reading the file", detected);
+        }
+    }
+    public byte[] sanitizePdf(byte[] inputBytes) throws IOException{
+        try (PDDocument document = Loader.loadPDF(inputBytes)){
+            document.getDocumentCatalog().setOpenAction(null);
+            document.getDocumentCatalog().getCOSObject().removeItem(COSName.AA);
+            document.getDocumentCatalog().getCOSObject().removeItem(COSName.JS);
+            document.getDocumentCatalog().setOpenAction(null);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            document.save(baos);
+            return baos.toByteArray();
         }
     }
     //метод для сохранения зараженных файлов
