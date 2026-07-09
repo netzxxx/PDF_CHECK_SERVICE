@@ -6,6 +6,6 @@ RUN mvn clean package -DskipTests
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=builder /app/target/*.jar app.jar
-RUN mkdir -p /storage/suspicious/
+RUN mkdir -p /storage/suspicious/ /storage/clean/
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

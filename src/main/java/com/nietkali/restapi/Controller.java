@@ -1,19 +1,19 @@
 package com.nietkali.restapi;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 @RestController // обработка rest api запроса и возврат json
 @RequestMapping("/api")
@@ -26,7 +26,7 @@ public class Controller {
     public ResponseEntity<?> checkPdf(@RequestParam("file")MultipartFile file){
         //проверка содержмое файла
         if (file.isEmpty()){
-            return ResponseEntity.badRequest().body("File isn't uploadm try again");
+            return ResponseEntity.badRequest().body("File isn't upload try again");
         }
         //проверка расширение файла
         String fileName = file.getOriginalFilename();
@@ -37,10 +37,19 @@ public class Controller {
         PdfCheckResponce responce = pdfAnalyzerservice.analyze(file);
         return  ResponseEntity.ok(responce);
     }
-    @PostMapping(value = "/pdf-sanitize", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<byte[]> sanitizePdf(@RequestParam("file") MultipartFile file) throws IOException{
-        if (file.isEmpty()) return ResponseEntity.badRequest().build();
-        byte[] cleanFile = pdfAnalyzerservice.sanitizePdf(file.getBytes());
-        return  ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"clean_" + file.getOriginalFilename()+ "\"").contentType(MediaType.APPLICATION_PDF).body(cleanFile);
+    @GetMapping("/download/{fileName}")
+    @Operation(summary = "Download sanitized file", description = "Download a cleaned PDF file by its name.")
+    public ResponseEntity <Resource> downloadCleanFile(@PathVariable String fileName){
+        try {
+            Path filePath = Paths.get("/storage/clean").resolve(fileName).normalize();
+            Resource resource = new UrlResource(filePath.toUri());
+            if (resource.exists()) {
+                return  ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + resource.getFilename() + "\"").body(resource);
+            } else  {
+                return ResponseEntity.internalServerError().build();
+            }
+        } catch (Exception e){
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }

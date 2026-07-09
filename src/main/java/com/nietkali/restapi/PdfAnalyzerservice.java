@@ -38,6 +38,7 @@ public class PdfAnalyzerservice {
     private static final List<String> injection = Arrays.asList("' or '1'='1", "union select", "drop table", "<script>", "<svg onload", "admin' --", "xp_cmdshell", "../../../");
     //директория с опасными файлами
     private static final String suspicious_dir = "/storage/suspicious";
+    private static final String clean_dir = "/storage/clean";
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PdfAnalyzerservice.class);
     public PdfCheckResponce analyze(MultipartFile file) {
         String fileName = file.getOriginalFilename();
@@ -105,15 +106,19 @@ public class PdfAnalyzerservice {
             }
             if (detected.isEmpty()) {
                 log.info("File [{}] checked. Status: safe", fileName);
-                return new PdfCheckResponce(fileName, true, "No unsafe objects detected", detected);
+                return new PdfCheckResponce(fileName, true, "No unsafe objects detected", detected, null);
             } else {
                 log.warn("File [{}] Checked. Status: suspicious. Threats found: {}", fileName, detected.size());
-                saveSuspiciousFile(fileBytes, fileName);
-                return new PdfCheckResponce(fileName, false, "Potentially unsafe objects have been detected", detected);
+                saveSuspiciousFile(fileBytes, fileName, suspicious_dir);
+                byte[] cleanBytes = sanitizePdf(fileBytes);
+                String cleanFileNames = "clean_" + System.currentTimeMillis() + "_" + fileName;
+                saveSuspiciousFile(cleanBytes, cleanFileNames, clean_dir);
+                String downloadUrl = "http://localhost:8080/api/download/" + cleanFileNames;
+                return new PdfCheckResponce(fileName, false, "Potentially unsafe objects have been detected", detected, downloadUrl);
             }
         } catch (IOException e) {
             detected.add("File_Read_Error");
-            return new PdfCheckResponce(fileName, false, "Error in reading the file", detected);
+            return new PdfCheckResponce(fileName, false, "Error in reading the file", detected, null);
         }
     }
     public byte[] sanitizePdf(byte[] inputBytes) throws IOException{
@@ -121,22 +126,21 @@ public class PdfAnalyzerservice {
             document.getDocumentCatalog().setOpenAction(null);
             document.getDocumentCatalog().getCOSObject().removeItem(COSName.AA);
             document.getDocumentCatalog().getCOSObject().removeItem(COSName.JS);
-            document.getDocumentCatalog().setOpenAction(null);
+            document.setDocumentInformation(new PDDocumentInformation());
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             document.save(baos);
             return baos.toByteArray();
         }
     }
     //метод для сохранения зараженных файлов
-    private void saveSuspiciousFile(byte[] fileBytes, String fileName){
+    private void saveSuspiciousFile(byte[] fileBytes, String fileName, String dir){
         try {
-            Path dirPath = Paths.get(suspicious_dir);
+            Path dirPath = Paths.get(dir);
             if (!Files.exists(dirPath)){
                 Files.createDirectories(dirPath);
             }
-            Path filePath = dirPath.resolve(System.currentTimeMillis()+"_"+fileName);
+            Path filePath = dirPath.resolve(fileName);
             Files.write(filePath, fileBytes);
-            System.out.println("Warning: Suspicious file saved at: " + filePath.toAbsolutePath());
         } catch (IOException e ){
             System.out.println("Error when suspicious file was saving: " + e.getMessage());
         }
